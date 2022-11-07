@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="abc@10.201.118.90:22 (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/abc/jdl" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="qx@10.201.195.3:22 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/qx/jdl/DKGT" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
