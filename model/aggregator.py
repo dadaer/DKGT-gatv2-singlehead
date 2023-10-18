@@ -33,9 +33,9 @@ class Attention(torch.nn.Module):
         self.linear2 = nn.Linear(self.d_model, embedding_dim)
         self.linear3 = nn.Linear(self.embedding_dim * self.n_heads, embedding_dim)
         # 多层编码层
-        self.enc_self_attn_layers = nn.ModuleList([EncoderLayer(self.d_model, self.d_ff, self.n_heads, self.d_k, self.d_v) for _ in range(self.n_layers)])
+        # self.enc_self_attn_layers = nn.ModuleList([EncoderLayer(self.d_model, self.d_ff, self.n_heads, self.d_k, self.d_v) for _ in range(self.n_layers)])
         # 单层编码层
-        # self.enc_self_attn = MultiHeadAttention(self.d_model, self.d_k, self.d_v, self.n_heads)
+        self.enc_self_attn = MultiHeadAttention(self.d_model, self.d_k, self.d_v, self.n_heads)
         # Transformer Encoder中的前馈神经网络
         # self.ffn = PoswiseFeedForwardNet(self.d_model, self.d_ff)
         # gat单头
@@ -75,16 +75,16 @@ class Attention(torch.nn.Module):
         mask = self.mask_emb[input_entity]
         # transformed = transformed * mask
         transformed = self.linear1(transformed)
-        for layers in self.enc_self_attn_layers:
-            transformed, attn = layers(transformed, mask, max_neighbors)
+        # for layers in self.enc_self_attn_layers:
+        #     transformed, attn = layers(transformed, mask, max_neighbors)
 
-        # transformed, attention_weight = self.enc_self_attn(transformed, transformed, transformed, mask, max_neighbors, self.n_heads)
+        transformed, attention_weight = self.enc_self_attn(transformed, transformed, transformed, mask, max_neighbors)
         # transformed = self.ffn(transformed)
         transformed = self.linear2(transformed)  # self-attention层后的每个邻居结点的表示
 
         output = torch.mean(transformed, dim=1)
         # gatv2 没有加多头
-        # output, nn_attention = self.gat(transformed, output)  # 计算每个邻居结点和output的注意力权重
+        output, nn_attention = self.gat(transformed, output)  # 计算每个邻居结点和output的注意力权重
         # gatv2 加多头
         # att_in_output = output
         # for i, att in enumerate(self.mutil_gat_atts):
@@ -111,7 +111,7 @@ class Attention(torch.nn.Module):
         # output = torch.cat([output, self_embedding], dim=1)
         # output = torch.matmul(output, self.concat_w)  # [batch_size, d*2] * [d*2, d]
         # attention_weight = torch.reshape(attention_weight, [-1, max_neighbors])
-        return output, logic_attention, attn
+        return output, logic_attention, attention_weight
 
     def _transform(self, e, r):
         normed = F.normalize(r, p=2, dim=2)
@@ -162,8 +162,8 @@ class MultiHeadAttention(nn.Module):
         # (B, S, D) -proj-> (B, S, D) -split-> (B, S, H, W) -trans-> (B, H, S, W)
         # 下面这个就是先映射，后分头；一定要注意的是q和k分头之后维度是一致的，所以一看这里都是d_k
         q_s = self.W_Q(Q).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)  # q_s: [batch_size x n_heads x max_neighbors x d_k]
-        k_s = self.W_K(K).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)  # k_s: [batch_size x n_heads x len_k x d_k]
-        v_s = self.W_V(V).view(batch_size, -1, self.n_heads, self.d_v).transpose(1, 2)  # v_s: [batch_size x n_heads x len_k x d_v]
+        k_s = self.W_K(K).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)  # k_s: [batch_size x n_heads x max_neighbors x d_k]
+        v_s = self.W_V(V).view(batch_size, -1, self.n_heads, self.d_v).transpose(1, 2)  # v_s: [batch_size x n_heads x max_neighbors x d_v]
         # 输入进行的attn_mask形状是 batch_size x max_neighbors x len_k，然后经过下面这个代码得到 新的attn_mask : [batch_size x n_heads x max_neighbors x len_k]，就是把pad信息重复了n个头上
         # attn_mask = attn_mask.unsqueeze(1).repeat(1, self.n_heads, 1, 1)
         # 然后我们计算 ScaledDotProductAttention 这个函数，去7.看一下
@@ -172,7 +172,7 @@ class MultiHeadAttention(nn.Module):
         context, attn = ScaledDotProductAttention()(q_s, k_s, v_s, self.d_k, attn_mask)
         context = context.transpose(1, 2).contiguous().view(batch_size, -1, self.n_heads * self.d_v)  # context: [batch_size x max_neighbors x n_heads * d_v]
         context = self.dropout(self.linear(context))
-        context += context + residual
+        context = context + residual
         context = self.layer_norm(context)
         return context, attn  # output: [batch_size x max_neighbors x d_model]
 
@@ -193,8 +193,10 @@ class ScaledDotProductAttention(nn.Module):
         # 首先经过matmul函数得到的scores形状是 : [batch_size x n_heads x max_neighbors x len_k]
         scores = torch.matmul(Q, K.transpose(-1, -2)) / np.sqrt(d_k)
 
-        # 然后关键词地方来了，下面这个就是用到了我们之前重点讲的attn_mask，把被mask的地方置为无限小，softmax之后基本就是0，对q的单词不起作用
+        # 然后关键地方来了，下面这个就是用到了我们之前重点讲的attn_mask，把被mask的地方置为无限小，softmax之后基本就是0，对q的单词不起作用
         scores.masked_fill_(attn_mask, -1e9)  # Fills elements of self tensor with value where mask is one.
+        # 加入位置编码
+
         attn = nn.Softmax(dim=-1)(scores)
         attn = self.dropout(attn)
         context = torch.matmul(attn, V)

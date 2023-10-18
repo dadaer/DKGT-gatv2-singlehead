@@ -4,7 +4,7 @@ import time
 import datetime
 import os
 import torch
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 from utils.data_helper import DataSet
 from utils.link_prediction import run_link_prediction
@@ -36,7 +36,7 @@ def parse_arguments():
     parser.add_argument('--corrupt_mode', type=str, default='both')
     # training
     parser.add_argument('--learning_rate', type=float, default=1e-3)
-    parser.add_argument('--num_epoch', type=int, default=1000)
+    parser.add_argument('--num_epoch', type=int, default=2000)
     parser.add_argument('--weight_decay', '-w', type=float, default=0.0)
     parser.add_argument('--batch_size', type=int, default=1024)
     parser.add_argument('--evaluate_size', type=int, default=250)
@@ -48,7 +48,7 @@ def parse_arguments():
     parser.add_argument('--N_2', type=int, default=90)
     # gpu option
     parser.add_argument('--gpu_fraction', type=float, default=0.2)
-    parser.add_argument('--gpu_device', type=str, default='2')
+    parser.add_argument('--gpu_device', type=str, default='1')
     parser.add_argument('--allow_soft_placement', type=bool, default=False)
     # for analysis
     parser.add_argument('--attention_record', type=bool, default=False)
@@ -64,7 +64,7 @@ def run_training(config):
 
     logger.info('args: {}'.format(config))
 
-    writer = SummaryWriter("display")
+    # writer = SummaryWriter("display")
 
     # prepare data
     logger.info("Loading data...")
@@ -101,7 +101,6 @@ def run_training(config):
 
             cnt_batch += 1
             loss_epoch += loss_batch.item()
-
             loss_batch.backward()
             optim.step()
             model.zero_grad()
@@ -116,7 +115,7 @@ def run_training(config):
         en_epoch = time.time()
         epoch_info = 'epoch {}, mean loss: {:.3f}, time: {:.3f}s'.format(epoch, loss_epoch / cnt_batch,
                                                                          en_epoch - st_epoch)
-        writer.add_scalar("DKGT-gatv2-singlehead-train1", loss_epoch / cnt_batch, epoch)
+        # writer.add_scalar("DKGT-gatv2-singlehead-train1", loss_epoch / cnt_batch, epoch)
         print(epoch_info)
         logger.info(epoch_info)
 
@@ -126,7 +125,7 @@ def run_training(config):
             st_test = time.time()
             with torch.no_grad():
                 performance, hit10 = run_link_prediction(config, model, dataset, epoch, logger, is_test=False)
-                writer.add_scalar("DKGT-gatv2-singlehead-test1", hit10, epoch)
+                # writer.add_scalar("DKGT-gatv2-singlehead-test1", hit10, epoch)
             if performance > best_performance:
                 best_performance = performance
                 torch.save(model.state_dict(), save_path)
