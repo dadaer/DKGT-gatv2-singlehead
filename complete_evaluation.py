@@ -59,5 +59,5 @@ if __name__ == '__main__':
     config.is_use_NSCaching = False
     config.attention_record = False
 
-    evaluate(LAN, "data/FB15k-237/head-10/train_model4.pt", config)
+    evaluate(LAN, "data/FB15k-237/head-10/train_model_DKGT.pt", config)
 

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model.aggregator import Attention
+from model.LAN_aggregator import LANAttention
 from model.score_function import TransE
 from utils.hooks import save_weights
 
@@ -30,8 +31,10 @@ class LAN(torch.nn.Module):
         self.relation_embedding_out = torch.nn.Embedding(self.num_relation, self.embedding_dim)
         nn.init.xavier_normal_(self.relation_embedding_out.weight.data)
 
-        self.encoder = Attention(self.num_relation, self.num_entity, self.embedding_dim, self.max_neighbor,
-                                 args.attention_record)
+        # DKGT
+        self.encoder = Attention(self.num_relation, self.num_entity, self.embedding_dim, self.max_neighbor, args.attention_record)
+        # LAN
+        # self.encoder = LANAttention(self.num_relation, self.num_entity, self.embedding_dim, self.max_neighbor, args.attention_record)
         self.decoder = TransE()
 
         # register hook to get weights for analysis
@@ -64,6 +67,7 @@ class LAN(torch.nn.Module):
         nh_origin_embedded = self.entity_embedding(input_triplet_neg[:, 0])
         nt_origin_embedded = self.entity_embedding(input_triplet_neg[:, 2])
 
+        # DKGT
         head_pos_embedded = self.encode(encoder, neighbor_head_pos, input_relation_ph,
                                         neighbor_weight_ph)
         tail_pos_embedded = self.encode(encoder, neighbor_tail_pos, input_relation_pt,
@@ -73,6 +77,17 @@ class LAN(torch.nn.Module):
                                         neighbor_weight_nh)
         tail_neg_embedded = self.encode(encoder, neighbor_tail_neg, input_relation_nt,
                                         neighbor_weight_nt)
+
+        # LAN
+        # head_pos_embedded = self.encode(encoder, neighbor_head_pos, input_relation_ph,
+        #                                 neighbor_weight_ph, ph_origin_embedded)
+        # tail_pos_embedded = self.encode(encoder, neighbor_tail_pos, input_relation_pt,
+        #                                 neighbor_weight_pt, pt_origin_embedded)
+        #
+        # head_neg_embedded = self.encode(encoder, neighbor_head_neg, input_relation_nh,
+        #                                 neighbor_weight_nh, nh_origin_embedded)
+        # tail_neg_embedded = self.encode(encoder, neighbor_tail_neg, input_relation_nt,
+        #                                 neighbor_weight_nt, nt_origin_embedded)
 
         emb_relation_pos_out = self.relation_embedding_out(input_relation_ph)
         emb_relation_neg_out = self.relation_embedding_out(input_relation_nh)
@@ -91,6 +106,7 @@ class LAN(torch.nn.Module):
 
         return loss
 
+    # DKGT
     def encode(self, encoder, neighbor_ids, query_relation, weight):
         """ TODO: check neighbor_ids content """
         neighbor_embedded = self.entity_embedding(neighbor_ids[:, :, 1])
@@ -98,6 +114,15 @@ class LAN(torch.nn.Module):
             return encoder(neighbor_embedded, neighbor_ids, query_relation, weight)
         else:
             return encoder(neighbor_embedded, neighbor_ids[:, :, 0])
+
+    # LAN
+    # def encode(self, encoder, neighbor_ids, query_relation, weight, self_embedding):
+    #     """ TODO: check neighbor_ids content """
+    #     neighbor_embedded = self.entity_embedding(neighbor_ids[:, :, 1])
+    #     if self.use_relation == 1:
+    #         return encoder(neighbor_embedded, neighbor_ids, query_relation, weight, self_embedding)
+    #     else:
+    #         return encoder(neighbor_embedded, neighbor_ids[:, :, 0], self_embedding)
 
     def decode(self, decoder, head_embedded, tail_embedded, relation_embedded):
         score = decoder(head_embedded, tail_embedded, relation_embedded)
@@ -121,9 +146,15 @@ class LAN(torch.nn.Module):
         neighbor_weight_pt = feed_dict['neighbor_weight_pt']
         input_triplet_pos = feed_dict['input_triplet_pos']
 
+        # LAN
         # ph_origin_embedded = self.entity_embedding(input_triplet_pos[:, 0])
         # pt_origin_embedded = self.entity_embedding(input_triplet_pos[:, 2])
+        # head_pos_embedded = self.encode(self.encoder, neighbor_head_pos, input_relation_ph,
+        #                                 neighbor_weight_ph, ph_origin_embedded)
+        # tail_pos_embedded = self.encode(self.encoder, neighbor_tail_pos, input_relation_pt,
+        #                                 neighbor_weight_pt, pt_origin_embedded)
 
+        # DKGT
         head_pos_embedded = self.encode(self.encoder, neighbor_head_pos, input_relation_ph,
                                         neighbor_weight_ph)
         tail_pos_embedded = self.encode(self.encoder, neighbor_tail_pos, input_relation_pt,

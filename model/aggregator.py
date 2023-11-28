@@ -23,7 +23,7 @@ class Attention(torch.nn.Module):
         self.d_model = 512
         self.n_heads = 8
         self.d_v = self.d_k = 64
-        self.in_features = 100
+        self.in_features = embedding_dim
         self.out_feature = 8
         self.dropout = 0.6
         self.alpha = 0.2
