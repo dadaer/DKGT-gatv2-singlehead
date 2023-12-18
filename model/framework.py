@@ -104,6 +104,22 @@ class LAN(torch.nn.Module):
         loss = torch.mean(F.relu(self.margin - positive_score + negative_score))
         loss += torch.mean(F.relu(self.margin - origin_positive_score + origin_negative_score))
 
+        # CE loss
+        # def loss(self, positive_scores, negative_scores):
+        #     # 使用sigmoid函数将得分映射到概率
+        #     positive_probs = torch.sigmoid(positive_scores)
+        #     negative_probs = torch.sigmoid(negative_scores)
+        #
+        #     # 计算正样本的损失
+        #     positive_loss = -torch.log(positive_probs + 1e-10)  # 避免log(0)
+        #
+        #     # 计算负样本的损失
+        #     negative_loss = -torch.log(1 - negative_probs + 1e-10)  # 避免log(0)
+        #
+        #     # 组合损失并求平均
+        #     loss = positive_loss + negative_loss
+        #     return loss.mean()
+
         return loss
 
     # DKGT

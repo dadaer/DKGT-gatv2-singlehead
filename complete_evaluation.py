@@ -45,7 +45,7 @@ if __name__ == '__main__':
     config.max_neighbor = 64
     config.use_relation = 1
     config.margin = 1.0
-    config.embedding_dim = 100
+    config.embedding_dim = 200
     config.corrupt_mode = "both"
     config.evaluate_size = 0
     config.N_1 = 60

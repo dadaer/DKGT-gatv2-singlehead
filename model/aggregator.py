@@ -35,7 +35,7 @@ class Attention(torch.nn.Module):
         # 多层编码层
         # self.enc_self_attn_layers = nn.ModuleList([EncoderLayer(self.d_model, self.d_ff, self.n_heads, self.d_k, self.d_v) for _ in range(self.n_layers)])
         # 单层编码层
-        self.enc_self_attn = MultiHeadAttention(self.d_model, self.d_k, self.d_v, self.n_heads)
+        self.enc_self_attn = MultiHeadAttention(self.embedding_dim, self.d_model, self.d_k, self.d_v, self.n_heads)
         # Transformer Encoder中的前馈神经网络
         # self.ffn = PoswiseFeedForwardNet(self.d_model, self.d_ff)
         # gat单头
@@ -71,6 +71,7 @@ class Attention(torch.nn.Module):
         input_entity = neighbor[:, :, 1]
 
         transformed = self.mlp_w(input_relation)
+        transformed_relation = transformed
         transformed = self._transform(input, transformed)
         mask = self.mask_emb[input_entity]
         # transformed = transformed * mask
@@ -78,7 +79,7 @@ class Attention(torch.nn.Module):
         # for layers in self.enc_self_attn_layers:
         #     transformed, attn = layers(transformed, mask, max_neighbors)
 
-        transformed, attention_weight = self.enc_self_attn(transformed, transformed, transformed, mask, max_neighbors)
+        transformed, attention_weight = self.enc_self_attn(transformed, transformed, transformed, transformed_relation, mask, max_neighbors)
         # transformed = self.ffn(transformed)
         transformed = self.linear2(transformed)  # self-attention层后的每个邻居结点的表示
 
@@ -141,21 +142,23 @@ class EncoderLayer(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model, d_k, d_v, n_heads, dropout=0.1):
+    def __init__(self, embedding_dim, d_model, d_k, d_v, n_heads, dropout=0.1):
         super(MultiHeadAttention, self).__init__()
         # 输入进来的Q、K、V是相等的，我们会使用映射linear做一个映射得到参数矩阵Wq, Wk,Wv
         self.d_model = d_model
         self.d_k = d_k
         self.d_v = d_v
         self.n_heads = n_heads
+        self.embedding_dim = embedding_dim
         self.W_Q = nn.Linear(d_model, d_k * n_heads)
         self.W_K = nn.Linear(d_model, d_k * n_heads)
         self.W_V = nn.Linear(d_model, d_v * n_heads)
+        self.W_R = nn.Linear(embedding_dim, d_v * n_heads)
         self.linear = nn.Linear(n_heads * d_v, d_model)
         self.dropout = nn.Dropout(dropout)
         self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
 
-    def forward(self, Q, K, V, mask, neighbors):
+    def forward(self, Q, K, V, transformed_relation, mask, neighbors):
         # 这个多头分为这几个步骤，首先映射分头，然后计算atten_scores，然后计算atten_value;
         # 输入进来的数据形状： Q: [batch_size x max_neighbors x d_model], K: [batch_size x len_k x d_model], V: [batch_size x len_k x d_model]
         residual, batch_size = Q, Q.size(0)
@@ -164,12 +167,13 @@ class MultiHeadAttention(nn.Module):
         q_s = self.W_Q(Q).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)  # q_s: [batch_size x n_heads x max_neighbors x d_k]
         k_s = self.W_K(K).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)  # k_s: [batch_size x n_heads x max_neighbors x d_k]
         v_s = self.W_V(V).view(batch_size, -1, self.n_heads, self.d_v).transpose(1, 2)  # v_s: [batch_size x n_heads x max_neighbors x d_v]
+        r_s = self.W_R(transformed_relation).view(batch_size, -1, self.n_heads, self.d_v).transpose(1, 2)
         # 输入进行的attn_mask形状是 batch_size x max_neighbors x len_k，然后经过下面这个代码得到 新的attn_mask : [batch_size x n_heads x max_neighbors x len_k]，就是把pad信息重复了n个头上
         # attn_mask = attn_mask.unsqueeze(1).repeat(1, self.n_heads, 1, 1)
         # 然后我们计算 ScaledDotProductAttention 这个函数，去7.看一下
         # 得到的结果有两个：context: [batch_size x n_heads x max_neighbors x d_v], attn: [batch_size x n_heads x max_neighbors x len_k]
         attn_mask = self.get_attn_pad_mask(mask, batch_size, self.n_heads, neighbors)
-        context, attn = ScaledDotProductAttention()(q_s, k_s, v_s, self.d_k, attn_mask)
+        context, attn = ScaledDotProductAttention(self.n_heads, self.embedding_dim)(q_s, k_s, v_s, r_s, self.d_k, attn_mask)
         context = context.transpose(1, 2).contiguous().view(batch_size, -1, self.n_heads * self.d_v)  # context: [batch_size x max_neighbors x n_heads * d_v]
         context = self.dropout(self.linear(context))
         context = context + residual
@@ -184,22 +188,36 @@ class MultiHeadAttention(nn.Module):
 
 
 class ScaledDotProductAttention(nn.Module):
-    def __init__(self, dropout=0.1):
+    def __init__(self, n_heads, embedding_dim, dropout=0.1):
         super(ScaledDotProductAttention, self).__init__()
         self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Identity()
+        self.proj = nn.Linear(embedding_dim, embedding_dim, device=0)
+        self.proj_drop = nn.Dropout(0.)
+        self.expand = nn.Conv2d(n_heads, embedding_dim, kernel_size=1, device=0)
 
-    def forward(self, Q, K, V, d_k, attn_mask):
+    def forward(self, Q, K, V, r_s, d_k, attn_mask):
         # 输入进来的维度分别是 [batch_size x n_heads x max_neighbors x d_k]  K： [batch_size x n_heads x len_k x d_k]  V: [batch_size x n_heads x len_k x d_v]
         # 首先经过matmul函数得到的scores形状是 : [batch_size x n_heads x max_neighbors x len_k]
+        # entity to relation
         scores = torch.matmul(Q, K.transpose(-1, -2)) / np.sqrt(d_k)
+        scores = scores + r_s
+        residual_r = scores
 
-        # 然后关键地方来了，下面这个就是用到了我们之前重点讲的attn_mask，把被mask的地方置为无限小，softmax之后基本就是0，对q的单词不起作用
         scores.masked_fill_(attn_mask, -1e9)  # Fills elements of self tensor with value where mask is one.
-        # 加入位置编码
-
         attn = nn.Softmax(dim=-1)(scores)
         attn = self.dropout(attn)
         context = torch.matmul(attn, V)
+
+        # entity to relation
+        # r_s = self.expand(attn + residual_r)
+
+        # relation to entity
+        w = r_s.masked_fill(attn_mask, -1e9)
+        w = w.softmax(dim=-1)
+        w = (w * r_s).transpose(-1, -2)
+        # context = context.transpose(1, 2).contiguous().view(1024, -1, self.n_heads * self.d_v)  # context: [batch_size x max_neighbors x n_heads * d_v]
+        context = context + self.fc(w)
         return context, attn
 
 

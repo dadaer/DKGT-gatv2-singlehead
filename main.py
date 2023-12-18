@@ -90,10 +90,10 @@ def run_training(config):
     # dataset.corrupter = corrputer
 
     # 网格搜索超参数
-    embedding_dims = [200, 500, 100]
+    embedding_dims = [200, 100, 500]
     learning_rates = [1e-3, 1e-2, 1e-1]
-    batch_sizes = [1024, 512, 2048]
-    nums_epochs = [1000, 2000]
+    batch_sizes = [512, 1024, 2048]
+    nums_epochs = [2000, 1000]
     losses = ['margin', 'CE']
     # optimizers = ['Adam', 'SGD', 'RMSprop']
 
@@ -112,8 +112,9 @@ def run_training(config):
         print(current_hyperparameters_message)
 
         model = LAN(config, dataset.num_training_entity, dataset.num_relation)
-        save_path = os.path.join(config.save_dir, "train_model_DKGT.pt")
+        save_path = os.path.join(config.save_dir, "train_model_DKGT_new.pt")
         model.to(config.device)
+        # L2正则化?
         optim = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
 
         dataset.model = model
