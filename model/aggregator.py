@@ -62,17 +62,17 @@ class Attention(torch.nn.Module):
         self.mask_weight = torch.cat([torch.zeros([self.num_entity, 1]), torch.ones([1, 1])*1e19], 0).\
             to(torch.cuda.current_device())
 
-    def forward(self, input, neighbor, query_relation_id, weight):
-        input_shape = input.shape
+    def forward(self, input, neighbor, query_relation_id, weight, entity_embedding):
+        input_shape = input.shape  # input 是邻居实体的向量表示
         max_neighbors = input_shape[1]
         hidden_size = input_shape[2]
 
         input_relation = neighbor[:, :, 0]  # 邻居关系
-        input_entity = neighbor[:, :, 1]
+        input_entity = neighbor[:, :, 1]  # 邻居实体
 
         transformed = self.mlp_w(input_relation)
         transformed_relation = transformed
-        transformed = self._transform(input, transformed)
+        transformed = self._transform(input, transformed)  # transformed 从关系变成实体
         mask = self.mask_emb[input_entity]
         # transformed = transformed * mask
         transformed = self.linear1(transformed)

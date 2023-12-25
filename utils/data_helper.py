@@ -302,6 +302,7 @@ class DataSet:
             except TypeError:  # when cache is not used
                 pass
             neighbor_head_pos = self.graph_train[batch_positive[:, 0]]  # [:, :, 0:2]
+
             neighbor_tail_pos = self.graph_train[batch_positive[:, 2]]  # [:, :, 0:2]
             batch_relation_ph = np.asarray(batch_positive[:, 1])
             batch_relation_pt = batch_relation_ph + self.num_relation

@@ -127,7 +127,7 @@ class LAN(torch.nn.Module):
         """ TODO: check neighbor_ids content """
         neighbor_embedded = self.entity_embedding(neighbor_ids[:, :, 1])
         if self.use_relation == 1:
-            return encoder(neighbor_embedded, neighbor_ids, query_relation, weight)
+            return encoder(neighbor_embedded, neighbor_ids, query_relation, weight, self.entity_embedding)
         else:
             return encoder(neighbor_embedded, neighbor_ids[:, :, 0])
 
