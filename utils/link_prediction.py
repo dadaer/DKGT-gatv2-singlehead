@@ -32,12 +32,14 @@ def run_link_prediction(args, model, dataset, epoch, logger, is_test=False):
             prediction_all = []
             for batch_eval in dataset.batch_iter_epoch(data_eval, 4096, corrupt=False, shuffle=False):
                 batch_weight_ph, batch_weight_pt, batch_triplet, batch_relation_tail, batch_neighbor_head, \
-                    batch_neighbor_tail = batch_eval
+                    head_neighbors_pos_one_hop, batch_neighbor_tail, tail_neighbors_pos_one_hop = batch_eval
                 # batch_triplet, batch_relation_tail, batch_neighbor_head, batch_neighbor_tail = batch_eval
                 batch_relation_head = batch_triplet[:, 1]
                 feed_dict = {
                         "neighbor_head_pos": batch_neighbor_head,
+                        "head_neighbors_pos_one_hop": head_neighbors_pos_one_hop,
                         "neighbor_tail_pos": batch_neighbor_tail,
+                        "tail_neighbors_pos_one_hop": tail_neighbors_pos_one_hop,
                         "input_relation_ph": batch_relation_head,
                         "input_relation_pt": batch_relation_tail,
                         "neighbor_weight_ph": batch_weight_ph,

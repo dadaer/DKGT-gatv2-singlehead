@@ -50,7 +50,7 @@ def parse_arguments():
     parser.add_argument('--N_2', type=int, default=90)
     # gpu option
     parser.add_argument('--gpu_fraction', type=float, default=0.2)
-    parser.add_argument('--gpu_device', type=str, default='1')
+    parser.add_argument('--gpu_device', type=str, default='0')
     parser.add_argument('--allow_soft_placement', type=bool, default=False)
     # for analysis
     parser.add_argument('--attention_record', type=bool, default=False)
@@ -69,8 +69,8 @@ def run_training(config):
     # writer = SummaryWriter("display")
     # initialize
     model_pretrain = TransE(10336, 1170, config.device)
-    checkpoint = torch.load("./TransE_PyTorch/checkpoint.tar")
-    model_pretrain.load_state_dict(checkpoint["model_state_dict"])
+    # checkpoint = torch.load("./TransE_PyTorch/checkpoint.tar")
+    # model_pretrain.load_state_dict(checkpoint["model_state_dict"])
 
     entity_embeddings = model_pretrain.entities_emb.weight.data
     relation_embeddings = model_pretrain.relations_emb.weight.data
@@ -92,7 +92,7 @@ def run_training(config):
     # 网格搜索超参数
     embedding_dims = [200, 100, 500]
     learning_rates = [1e-3, 1e-2, 1e-1]
-    batch_sizes = [512, 1024, 2048]
+    batch_sizes = [1024, 512, 2048]
     nums_epochs = [2000, 1000]
     losses = ['margin', 'CE']
     # optimizers = ['Adam', 'SGD', 'RMSprop']

@@ -45,9 +45,17 @@ class LAN(torch.nn.Module):
             feed_dict[key] = torch.from_numpy(value).to(device=torch.cuda.current_device())
 
         neighbor_weight_ph = feed_dict['neighbor_weight_ph']
+        # head_neighbors_pos_min_dest = feed_dict['head_neighbors_pos_min_dest']
+        head_neighbors_pos_one_hop = feed_dict['head_neighbors_pos_one_hop']
         neighbor_weight_pt = feed_dict['neighbor_weight_pt']
+        # tail_neighbors_pos_min_dest = feed_dict['tail_neighbors_pos_min_dest']
+        tail_neighbors_pos_one_hop = feed_dict['tail_neighbors_pos_one_hop']
         neighbor_weight_nh = feed_dict['neighbor_weight_nh']
+        # head_neighbors_neg_min_dest = feed_dict['head_neighbors_neg_min_dest']
+        head_neighbors_neg_one_hop = feed_dict['head_neighbors_neg_one_hop']
         neighbor_weight_nt = feed_dict['neighbor_weight_nt']
+        # tail_neighbors_neg_min_dest = feed_dict['tail_neighbors_neg_min_dest']
+        tail_neighbors_neg_one_hop = feed_dict['tail_neighbors_neg_one_hop']
         neighbor_head_pos = feed_dict['neighbor_head_pos']
         neighbor_head_neg = feed_dict['neighbor_head_neg']
         neighbor_tail_pos = feed_dict['neighbor_tail_pos']
@@ -69,14 +77,14 @@ class LAN(torch.nn.Module):
 
         # DKGT
         head_pos_embedded = self.encode(encoder, neighbor_head_pos, input_relation_ph,
-                                        neighbor_weight_ph)
+                                        neighbor_weight_ph, head_neighbors_pos_one_hop)
         tail_pos_embedded = self.encode(encoder, neighbor_tail_pos, input_relation_pt,
-                                        neighbor_weight_pt)
+                                        neighbor_weight_pt, tail_neighbors_pos_one_hop)
 
         head_neg_embedded = self.encode(encoder, neighbor_head_neg, input_relation_nh,
-                                        neighbor_weight_nh)
+                                        neighbor_weight_nh, head_neighbors_neg_one_hop)
         tail_neg_embedded = self.encode(encoder, neighbor_tail_neg, input_relation_nt,
-                                        neighbor_weight_nt)
+                                        neighbor_weight_nt, tail_neighbors_neg_one_hop)
 
         # LAN
         # head_pos_embedded = self.encode(encoder, neighbor_head_pos, input_relation_ph,
@@ -123,11 +131,11 @@ class LAN(torch.nn.Module):
         return loss
 
     # DKGT
-    def encode(self, encoder, neighbor_ids, query_relation, weight):
+    def encode(self, encoder, neighbor_ids, query_relation, weight, neighbors_one_hop):
         """ TODO: check neighbor_ids content """
         neighbor_embedded = self.entity_embedding(neighbor_ids[:, :, 1])
         if self.use_relation == 1:
-            return encoder(neighbor_embedded, neighbor_ids, query_relation, weight, self.entity_embedding)
+            return encoder(neighbor_embedded, neighbor_ids, query_relation, weight, self.entity_embedding, neighbors_one_hop)
         else:
             return encoder(neighbor_embedded, neighbor_ids[:, :, 0])
 
@@ -155,7 +163,9 @@ class LAN(torch.nn.Module):
             feed_dict[key] = torch.from_numpy(value).to(device=torch.cuda.current_device())
 
         neighbor_head_pos = feed_dict['neighbor_head_pos']
+        head_neighbors_pos_one_hop = feed_dict['head_neighbors_pos_one_hop']
         neighbor_tail_pos = feed_dict['neighbor_tail_pos']
+        tail_neighbors_pos_one_hop = feed_dict['tail_neighbors_pos_one_hop']
         input_relation_ph = feed_dict['input_relation_ph']
         input_relation_pt = feed_dict['input_relation_pt']
         neighbor_weight_ph = feed_dict['neighbor_weight_ph']
@@ -172,9 +182,9 @@ class LAN(torch.nn.Module):
 
         # DKGT
         head_pos_embedded = self.encode(self.encoder, neighbor_head_pos, input_relation_ph,
-                                        neighbor_weight_ph)
+                                        neighbor_weight_ph, head_neighbors_pos_one_hop)
         tail_pos_embedded = self.encode(self.encoder, neighbor_tail_pos, input_relation_pt,
-                                        neighbor_weight_pt)
+                                        neighbor_weight_pt, tail_neighbors_pos_one_hop)
 
         emb_relation_pos_out = self.relation_embedding_out(input_relation_ph)
         return self.decode(self.decoder, head_pos_embedded, tail_pos_embedded, emb_relation_pos_out)

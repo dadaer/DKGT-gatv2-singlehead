@@ -5,6 +5,7 @@ from collections import defaultdict
 
 import numpy as np
 import torch
+import networkx as nx
 
 logger = logging.getLogger()
 
@@ -61,6 +62,10 @@ class DataSet:
         logger.info('got {} entities for training'.format(self.num_training_entity))
         logger.info('got {} relations for training'.format(self.num_relation))
         self.graph_train, self.weight_graph = self.sample_neighbor(graph_train)
+        self.one_hop_adjacency_matrix = self.construct_one_hop(triplets_train, self.num_training_entity, self.num_relation)
+        print("finish constructing one hop adjacency matrix")
+        # self.min_dest_adjacency_matrix = self.construct_min_dest(triplets_train)
+        print("finish constructing shortest distance adjacency matrix")
         triplets_test = self.doc_to_tensor(test_path)
         triplets_dev = self.doc_to_tensor(dev_path)
 
@@ -253,6 +258,48 @@ class DataSet:
 
         return sample_graph, weight_graph
 
+    def construct_one_hop(self, triplets_train, num_entity, num_relation):
+        # 一阶关系邻接矩阵
+        one_hop_adjacency_matrix = [[2340] * num_entity for _ in range(num_entity)]
+
+        # 填充邻接矩阵
+        for e1_index, r_index, e2_index in triplets_train:
+            one_hop_adjacency_matrix[e1_index][e2_index] = r_index
+            one_hop_adjacency_matrix[e2_index][e1_index] = r_index + num_relation
+
+        return np.array(one_hop_adjacency_matrix)
+
+    def construct_min_dest(self, triplets_train):
+        # 最短路径邻接矩阵
+        # 创建一个图
+        G = nx.Graph()
+
+        # 添加节点和边
+        for e1, r, e2 in triplets_train:
+            G.add_node(e1)
+            G.add_node(e2)
+            G.add_edge(e1, e2)  # 我们可以添加关系作为边的属性，但在计算最短距离时通常不需要它
+
+        # 使用Floyd-Warshall算法计算所有节点对之间的最短路径长度
+        # 这将返回一个节点对字典
+        lengths = dict(nx.all_pairs_shortest_path_length(G))
+
+        # 将最短路径长度转换为邻接矩阵
+        # 注意：NetworkX通常使用字典来表示图结构，但我们可以转换它为邻接矩阵
+        nodes = list(G.nodes)
+        n = len(nodes)
+        min_dest_adjacency_matrix = [[64] * n for _ in range(n)]
+
+        # 填充邻接矩阵
+        for i, node1 in enumerate(nodes):
+            for j, node2 in enumerate(nodes):
+                if node1 == node2:
+                    min_dest_adjacency_matrix[i][j] = 0
+                else:
+                    min_dest_adjacency_matrix[i][j] = lengths[node1].get(node2, float('inf'))
+
+        return np.array(min_dest_adjacency_matrix)
+
     def doc_to_tensor(self, data_path):
         """ Prepares list of triplet for training. """
         triplet_tensor = []
@@ -273,6 +320,24 @@ class DataSet:
                     head, relation, tail = line
                     triplet_tensor.append((head, relation, tail))
         return triplet_tensor
+
+    def get_neighbors_min_dest(self, neighbors):  # neighbors[batch_size, max_neighbors]
+        min_dest_adjacency_matrix = np.full((neighbors.shape[0], neighbors.shape[1], neighbors.shape[1]), 64)
+        for k, neighbor in enumerate(neighbors):
+            neighbors = [element for element in neighbor if element != 10336]
+            for i, node1 in enumerate(neighbors):
+                for j, node2 in enumerate(neighbors):
+                    min_dest_adjacency_matrix[k][i][j] = self.min_dest_adjacency_matrix[node1][node2]
+        return min_dest_adjacency_matrix
+
+    def get_neighbors_one_hop(self, neighbors):
+        one_hop_adjacency_matrix = np.full((neighbors.shape[0], neighbors.shape[1], neighbors.shape[1]), 2340)
+        for k, neighbor in enumerate(neighbors):
+            nbor = [element for element in neighbor if element != 10336]
+            for i, node1 in enumerate(nbor):
+                for j, node2 in enumerate(nbor):
+                    one_hop_adjacency_matrix[k][i][j] = self.one_hop_adjacency_matrix[node1][node2]
+        return one_hop_adjacency_matrix
 
     def batch_iter_epoch(self, data, batch_size, num_negative=1, corrupt=True, shuffle=True):
         """
@@ -302,8 +367,14 @@ class DataSet:
             except TypeError:  # when cache is not used
                 pass
             neighbor_head_pos = self.graph_train[batch_positive[:, 0]]  # [:, :, 0:2]
-
+            # 在这里添加关系和结构偏置信息
+            head_neighbors_pos = neighbor_head_pos[:, :, 1]
+            # head_neighbors_pos_min_dest = self.get_neighbors_min_dest(head_neighbors_pos)
+            head_neighbors_pos_one_hop = self.get_neighbors_one_hop(head_neighbors_pos)
             neighbor_tail_pos = self.graph_train[batch_positive[:, 2]]  # [:, :, 0:2]
+            tail_neighbors_pos = neighbor_tail_pos[:, :, 1]
+            # tail_neighbors_pos_min_dest = self.get_neighbors_min_dest(tail_neighbors_pos)
+            tail_neighbors_pos_one_hop = self.get_neighbors_one_hop(tail_neighbors_pos)
             batch_relation_ph = np.asarray(batch_positive[:, 1])
             batch_relation_pt = batch_relation_ph + self.num_relation
             neighbor_imply_ph = self.weight_graph[batch_positive[:, 0]].reshape(-1, self.max_neighbor, 1)
@@ -369,7 +440,13 @@ class DataSet:
 
                 batch_negative = np.asarray(batch_negative)
                 neighbor_head_neg = self.graph_train[batch_negative[:, 0]]
+                head_neighbors_neg = neighbor_head_neg[:, :, 1]
+                # head_neighbors_neg_min_dest = self.get_neighbors_min_dest(head_neighbors_neg)
+                head_neighbors_neg_one_hop = self.get_neighbors_one_hop(head_neighbors_neg)
                 neighbor_tail_neg = self.graph_train[batch_negative[:, 2]]
+                tail_neighbors_neg = neighbor_tail_neg[:, :, 1]
+                # tail_neighbors_neg_min_dest = self.get_neighbors_min_dest(tail_neighbors_neg)
+                tail_neighbors_neg_one_hop = self.get_neighbors_one_hop(tail_neighbors_neg)
                 neighbor_imply_nh = self.weight_graph[batch_negative[:, 0]].reshape(-1, self.max_neighbor, 1)
                 neighbor_imply_nt = self.weight_graph[batch_negative[:, 2]].reshape(-1, self.max_neighbor, 1)
 
@@ -387,9 +464,17 @@ class DataSet:
                 batch_weight_nt = np.concatenate((batch_weight_nt, neighbor_imply_nt), axis=2)
                 feed_dict = {
                     "neighbor_head_pos": neighbor_head_pos,
+                    # "head_neighbors_pos_min_dest": head_neighbors_pos_min_dest,
+                    "head_neighbors_pos_one_hop": head_neighbors_pos_one_hop,
                     "neighbor_tail_pos": neighbor_tail_pos,
+                    # "tail_neighbors_pos_min_dest": tail_neighbors_pos_min_dest,
+                    "tail_neighbors_pos_one_hop": tail_neighbors_pos_one_hop,
                     "neighbor_head_neg": neighbor_head_neg,
+                    # "head_neighbors_neg_min_dest": head_neighbors_neg_min_dest,
+                    "head_neighbors_neg_one_hop": head_neighbors_neg_one_hop,
                     "neighbor_tail_neg": neighbor_tail_neg,
+                    # "tail_neighbors_neg_min_dest": tail_neighbors_neg_min_dest,
+                    "tail_neighbors_neg_one_hop": tail_neighbors_neg_one_hop,
                     "input_relation_ph": batch_relation_ph,
                     "input_relation_pt": batch_relation_pt,
                     "input_relation_nh": batch_relation_nh,
@@ -403,8 +488,8 @@ class DataSet:
                 }
                 yield feed_dict
             else:
-                yield [batch_weight_ph, batch_weight_pt,
-                       batch_positive, batch_relation_pt, neighbor_head_pos, neighbor_tail_pos]
+                yield [batch_weight_ph, batch_weight_pt, batch_positive, batch_relation_pt,
+                       neighbor_head_pos, head_neighbors_pos_one_hop, neighbor_tail_pos, tail_neighbors_pos_one_hop]
 
     def next_sample_eval(self, triplet_evaluate, is_test):
         if is_test:
