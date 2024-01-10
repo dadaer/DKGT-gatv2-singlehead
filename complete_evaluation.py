@@ -45,7 +45,7 @@ if __name__ == '__main__':
     config.max_neighbor = 64
     config.use_relation = 1
     config.margin = 1.0
-    config.embedding_dim = 200
+    config.embedding_dim = 100
     config.corrupt_mode = "both"
     config.evaluate_size = 0
     config.N_1 = 60
@@ -59,5 +59,5 @@ if __name__ == '__main__':
     config.is_use_NSCaching = False
     config.attention_record = False
 
-    evaluate(LAN, "data/FB15k-237/head-10/train_model_DKGT.pt", config)
+    evaluate(LAN, "data/FB15k-237/head-10/train_model_DKGT_new.pt", config)
 

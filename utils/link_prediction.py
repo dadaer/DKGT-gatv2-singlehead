@@ -1,6 +1,6 @@
 import random
 import torch
-
+from tqdm import tqdm
 
 def run_link_prediction(args, model, dataset, epoch, logger, is_test=False):
     """:param is_test: bool, true means evaluate all samples in dataset.triplets_test.
@@ -25,7 +25,7 @@ def run_link_prediction(args, model, dataset, epoch, logger, is_test=False):
         evaluate_data = dataset.triplets_dev.tolist()
 
     cnt_sample = 0
-    for triplet in random.sample(evaluate_data, evaluate_size):
+    for triplet in tqdm(random.sample(evaluate_data, evaluate_size)):
         # using head predict tail, and using tail to predict head
         sample_predict_head = dataset.next_sample_eval(triplet, is_test=is_test)
         def eval_by_batch(data_eval):

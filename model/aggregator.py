@@ -52,11 +52,11 @@ class Attention(torch.nn.Module):
         nn.init.xavier_normal_(self.query_relation_embedding.weight.data)
         self.spatial_encoder = torch.nn.Embedding(65, self.n_heads)
         nn.init.xavier_normal_(self.spatial_encoder.weight.data)
-        self.att_w = torch.nn.Parameter(torch.zeros(size=(self.embedding_dim * 2 + 1, self.embedding_dim * 2)))
+        self.att_w = torch.nn.Parameter(torch.zeros(size=(self.embedding_dim * 2, self.embedding_dim * 2)))
         nn.init.xavier_normal_(self.att_w.data)
         self.att_v = torch.nn.Parameter(torch.zeros(size=(1, self.embedding_dim * 2)))
         nn.init.xavier_normal_(self.att_v.data)
-        self.concat_w = torch.nn.Parameter(torch.zeros(size=(self.embedding_dim * 2, self.embedding_dim)))
+        self.concat_w = torch.nn.Parameter(torch.zeros(size=(self.embedding_dim, self.embedding_dim)))
         nn.init.xavier_normal_(self.concat_w.data)
 
         self.mask_emb = torch.cat([torch.ones([self.num_entity, 1]), torch.zeros([1, 1])], 0).\
@@ -102,21 +102,21 @@ class Attention(torch.nn.Module):
         #         nn_attention = att_nn_attention
         # output = self.linear3(output)
 
-        # query_relation = self.query_relation_embedding(query_relation_id)
-        # query_relation = query_relation.unsqueeze(1)  # 第二维增加一个维度
-        # query_relation = query_relation.expand(-1, max_neighbors, -1)
-
-        # attention_logit = self.mlp(query_relation, transformed, max_neighbors)
-        # mask_logit = self.mask_weight[input_entity]
-        # attention_logit = attention_logit - torch.reshape(mask_logit, [-1, max_neighbors])
-        # nn_weight = F.softmax(attention_logit, dim=1)
+        query_relation = self.query_relation_embedding(query_relation_id)
+        query_relation = query_relation.unsqueeze(1)  # 第二维增加一个维度
+        query_relation = query_relation.expand(-1, max_neighbors, -1)
+        attention_logit = self.mlp(query_relation, transformed, max_neighbors)
+        mask_logit = self.mask_weight[input_entity]
+        attention_logit = attention_logit - torch.reshape(mask_logit, [-1, max_neighbors])
+        nn_weight = F.softmax(attention_logit, dim=1)
         logic_attention = weight[:, :, 0] / (weight[:, :, 1] + 1)
         # attention_weight = nn_weight + logic_attention
-        # attention_weight = torch.reshape(attention_weight, [-1, max_neighbors, 1])
-        # output = torch.sum(transformed * attention_weight, dim=1)
+        nn_weight = torch.reshape(nn_weight, [-1, max_neighbors, 1])
+        nn_output = torch.sum(transformed * nn_weight, dim=1)
         # output = torch.cat([output, self_embedding], dim=1)
-        # output = torch.matmul(output, self.concat_w)  # [batch_size, d*2] * [d*2, d]
+        nn_output = torch.matmul(nn_output, self.concat_w)  # [batch_size, d*2] * [d*2, d]
         # attention_weight = torch.reshape(attention_weight, [-1, max_neighbors])
+        output += nn_output
         return output, logic_attention, attention_weight
 
     def _transform(self, e, r):

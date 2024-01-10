@@ -11,6 +11,7 @@ from utils.data_helper import DataSet
 from utils.link_prediction import run_link_prediction
 from model.framework import LAN
 from TransE_PyTorch.model import TransE
+from tqdm import tqdm
 from NSCaching.BernCorrupter import BernCorrupter
 
 logger = logging.getLogger()
@@ -43,7 +44,7 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=1024)
     parser.add_argument('--evaluate_size', type=int, default=250)
     parser.add_argument('--steps_per_display', type=int, default=100)
-    parser.add_argument('--epoch_per_checkpoint', type=int, default=25)
+    parser.add_argument('--epoch_per_checkpoint', type=int, default=50)
     # NSCaching
     parser.add_argument('--is_use_NSCaching', type=bool, default=False)
     parser.add_argument('--N_1', type=int, default=30)
@@ -92,7 +93,7 @@ def run_training(config):
     # 网格搜索超参数
     embedding_dims = [200, 100, 500]
     learning_rates = [1e-3, 1e-2, 1e-1]
-    batch_sizes = [1024, 512, 2048]
+    batch_sizes = [512, 1024, 2048]
     nums_epochs = [2000, 1000]
     losses = ['margin', 'CE']
     # optimizers = ['Adam', 'SGD', 'RMSprop']
@@ -127,7 +128,7 @@ def run_training(config):
             st_epoch = time.time()
             loss_epoch = 0.
             cnt_batch = 0
-            for batch_data in dataset.batch_iter_epoch(dataset.triplets_train, config.batch_size, config.n_neg):
+            for batch_data in tqdm(dataset.batch_iter_epoch(dataset.triplets_train, config.batch_size, config.n_neg)):
                 model.train()
                 st_batch = time.time()
                 loss_batch = model.loss(batch_data)
